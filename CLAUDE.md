@@ -82,6 +82,18 @@ if known) against bolt Playwright patterns."**
 
 Treat counts as a **floor** — they seed your judgment, they aren't the verdict.
 
+**For the "how many are flaky, and which do I fix?" question**, run the scoreboard — it prints a
+count and a ranked, worst-first fix list straight from the report(s):
+
+```bash
+~/flaky-triage-agent/worklist.sh <report> [more reports...]
+```
+
+Pass **one** report for a snapshot, or **several runs** (or a folder) to aggregate a **true per-test
+flake rate** (`flaky 70% · 7/10`). The `WORK ON THESE` section is the fix queue (FLAKE only); it
+separates out real-bug candidates and env failures as "not your fix." Lead your report with these
+counts so Pranal immediately sees the size of the problem and where to start.
+
 ## Step 2 — Measure flakiness empirically (the ground truth)
 
 A failure is only *provably* a flake when it fails sometimes and passes other times. When the report

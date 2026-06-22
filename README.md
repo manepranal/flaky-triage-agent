@@ -85,16 +85,47 @@ cd ~/flaky-triage-agent
 ./run.sh
 ```
 
+## "How many are flaky, and which do I fix?" — the scoreboard
+
+`worklist.sh` answers that in one line. It prints a **count** and a **ranked, worst-first list of the
+flaky tests to fix** (each with file:line + a probable cause and bolt `Pattern #`). Pass **one**
+report for a snapshot, or **several** (or a folder of them) to aggregate a **true per-test flake
+rate** — the real signal for how flaky something is:
+
+```bash
+# One run (snapshot)
+./worklist.sh results.json
+
+# Several runs → real flake rate ("flaky 70% · 7/10")
+./worklist.sh run1.json run2.json run3.json
+./worklist.sh ./nightly-reports/
+```
+```
+Counts:  1 FLAKE  ·  0 needs re-run  ·  1 real-bug candidate  ·  1 env (ignore)
+
+── WORK ON THESE — flaky, fix the test (worst-first) ─────────────────────────
+  1. [flaky 33% · 1/3] should show the org pill
+        playwright/orgs/org-pill.spec.ts:42   likely: selector/visibility race  #4/#8
+```
+The `WORK ON THESE` list **is** your fix queue; real-bug and env rows are called out as "not your
+fix." One report can't prove flakiness (it routes ambiguous failures to "needs re-run"); pass several
+runs or use `rerun.sh` for a definitive rate.
+
 ## Standalone tools (fast, no tokens)
 
 ```bash
+# Flake scoreboard: count + ranked fix list (one report, or many to aggregate)
+./worklist.sh results.json
+./worklist.sh run1.json run2.json run3.json
+
 # Deterministic pre-scan: parse a report OR smell-scan a spec (auto-detected)
 ./triage.sh /Users/pranalmane/bolt/test-results/results.json
 ./triage.sh /Users/pranalmane/bolt/playwright/orgs
 
 # Just the report parser
 node parse-report.mjs /Users/pranalmane/bolt/test-results/results.json
-node parse-report.mjs --stats results.json     # one-line tally
+node parse-report.mjs --worklist results.json   # the scoreboard
+node parse-report.mjs --stats results.json       # one-line tally
 
 # Empirically measure flakiness
 ./rerun.sh "playwright/orgs/org-pill.spec.ts" 10
@@ -130,8 +161,9 @@ outward-facing actions.
 ```
 flaky-triage-agent/
 ├── CLAUDE.md         ← the brain: input resolution, taxonomy, decision tree, output
+├── worklist.sh       ← flake scoreboard: count + ranked fix list (1 report or many)
 ├── triage.sh         ← deterministic pre-scan (report-parse OR flake-smell scan)
-├── parse-report.mjs  ← Playwright/Jest JSON report parser (zero deps)
+├── parse-report.mjs  ← Playwright/Jest JSON report parser + aggregator (zero deps)
 ├── rerun.sh          ← empirical re-run harness (N× → flake rate)
 ├── run.sh            ← entry point
 └── README.md         ← this file
