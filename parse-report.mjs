@@ -32,7 +32,9 @@ if (!targets.length) {
 // ── Gather every report file from the given targets ───────────────────────────
 function looksLikeReport(p) {
   try {
-    const j = JSON.parse(readFileSync(p, 'utf8'));
+    const txt = readFileSync(p, 'utf8');
+    if (/^\s*</.test(txt)) return /<testcase\b|<testsuite\b/.test(txt); // JUnit XML
+    const j = JSON.parse(txt);
     return !!(j.suites || j.testResults);
   } catch {
     return false;
@@ -46,7 +48,10 @@ function gatherReports(t) {
     'results.json',
     'report.json',
     'test-results.json',
+    'junit.xml',
+    'results.xml',
     join('test-results', 'results.json'),
+    join('test-results', 'junit.xml'),
     join('playwright-report', 'results.json'),
   ];
   for (const c of candidates) {
@@ -54,7 +59,7 @@ function gatherReports(t) {
     if (existsSync(p) && statSync(p).isFile()) out.add(p);
   }
   for (const f of readdirSync(t)) {
-    if (!f.endsWith('.json')) continue;
+    if (!/\.(json|xml)$/.test(f)) continue;
     const p = join(t, f);
     try {
       if (statSync(p).isFile() && looksLikeReport(p)) out.add(p);
@@ -163,10 +168,60 @@ function parseReport(data) {
   return rows;
 }
 
+// ── Parse a JUnit XML report (what bolt's runs emit) — regex, no XML dep ───────
+function parseJUnit(xml) {
+  const rows = [];
+  const unesc = (s) =>
+    (s || '')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&#10;/g, '\n')
+      .replace(/&#9;/g, '\t')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+  const attr = (s, n) => {
+    const m = s.match(new RegExp(n + '="([^"]*)"'));
+    return m ? unesc(m[1]) : '';
+  };
+  const reCase = /<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g;
+  let m;
+  while ((m = reCase.exec(xml))) {
+    const attrs = m[1];
+    const inner = m[3] || '';
+    let status = 'expected';
+    let error = '';
+    if (/<failure\b|<error\b/.test(inner)) {
+      status = 'unexpected';
+      const fm = inner.match(
+        /<(?:failure|error)\b([^>]*)>([\s\S]*?)<\/(?:failure|error)>|<(?:failure|error)\b([^>]*)\/>/,
+      );
+      if (fm) error = (attr(fm[1] || fm[3] || '', 'message') || unesc(fm[2] || '')).trim();
+    } else if (/<skipped\b/.test(inner)) {
+      status = 'skipped';
+    }
+    rows.push({
+      title: attr(attrs, 'name'),
+      spec: attr(attrs, 'name'),
+      file: attr(attrs, 'classname'),
+      line: '',
+      project: '',
+      status,
+      retries: 0,
+      attempts: [status === 'expected' ? 'passed' : status === 'skipped' ? 'skipped' : 'failed'],
+      error: trimErr(error),
+      envSuspect: envSuspect(error),
+    });
+  }
+  return rows;
+}
+
 // Parse all reports; keep both a flat list (for human/json/stats) and per-report runs.
 const perReport = reportFiles.map((f) => {
   try {
-    return { file: f, rows: parseReport(JSON.parse(readFileSync(f, 'utf8'))) };
+    const txt = readFileSync(f, 'utf8');
+    const rows = /^\s*</.test(txt) ? parseJUnit(txt) : parseReport(JSON.parse(txt));
+    return { file: f, rows };
   } catch (e) {
     console.error(`parse-report: skipped "${f}": ${e.message}`);
     return { file: f, rows: [] };

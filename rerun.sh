@@ -44,7 +44,7 @@ if [ ! -d "$REPO/.git" ]; then
   exit 1
 fi
 
-echo "=== Empirical re-run: $N× · repo=$KIND · retries=0 ==="
+echo "=== Empirical re-run: ${N}x · repo=$KIND · retries=0 ==="
 echo "Spec/filter: $SPEC"
 echo "Env is whatever $REPO's playwright.config + current .env point at — confirm it's the one you mean."
 echo ""
